@@ -1,0 +1,75 @@
+services:
+  # MySQL Database Service
+  mysql:
+    image: mysql:8.0-oracle  # Specifies the MySQL image version (Oracle variant)
+    container_name: mysql-server  # Sets a custom container name for MySQL
+    networks:
+      - zabbix-net  # Connects the container to the 'zabbix-net' network
+    ports:
+      - "10001:3306"  # Maps host port 10001 to MySQL's default port 3306
+    restart: unless-stopped  # Ensures the container restarts unless manually stopped
+    environment:  # Environment variables for MySQL configuration
+      - MYSQL_DATABASE=zabbix  # Creates a 'zabbix' database
+      - MYSQL_USER=zabbix  # Creates a 'zabbix' user
+      - MYSQL_PASSWORD=pw  # Password for the 'zabbix' user
+      - MYSQL_ROOT_PASSWORD=pw  # Root password for MySQL
+    volumes:
+      - mysql-data:/var/lib/mysql  # Persists MySQL data in a Docker volume
+
+  # Zabbix Server Service
+  zabbix-server-mysql:
+    image: zabbix/zabbix-server-mysql:alpine-7.0-latest  # Uses the Alpine-based Zabbix server image
+    container_name: zabbix-server-mysql  # Custom container name for Zabbix Server
+    networks:
+      - zabbix-net  # Connects to the same network as MySQL
+    ports:
+      - "10051:10051"  # Exposes Zabbix server port 10051 on the host
+    restart: unless-stopped  # Ensures automatic restart unless manually stopped
+    environment:  # Environment variables for database connection
+      - DB_SERVER_HOST=mysql-server  # Specifies the MySQL server host
+      - MYSQL_DATABASE=zabbix  # Matches the database name from MySQL setup
+      - MYSQL_USER=zabbix  # Matches the MySQL user
+      - MYSQL_PASSWORD=pw  # Matches the MySQL password
+      - MYSQL_ROOT_PASSWORD=pw  # Root password for extra MySQL access
+    volumes:
+      - zabbix-server-mysql-data:/var/lib/zabbix  # Persists Zabbix server data
+
+  # Zabbix Web Interface with Nginx
+  zabbix-web-nginx-mysql:
+    image: zabbix/zabbix-web-nginx-mysql:alpine-7.0-latest  # Uses the Alpine-based Zabbix web image
+    container_name: zabbix-web-nginx-mysql  # Custom container name for the web UI
+    networks:
+      - zabbix-net  # Connects to 'zabbix-net' to reach the database and server
+    ports:
+      - "80:8080"  # Maps port 80 on the host to port 8080 in the container (web access)
+    restart: unless-stopped  # Restarts automatically unless stopped
+    environment:  # Configures the web interface to connect to Zabbix Server and MySQL
+      - ZBX_SERVER_HOST=zabbix-server-mysql  # Specifies the Zabbix server host
+      - DB_SERVER_HOST=mysql-server  # Database host connection
+      - MYSQL_DATABASE=zabbix  # Matches the MySQL database
+      - MYSQL_USER=zabbix  # Matches the MySQL user
+      - MYSQL_PASSWORD=pw  # Matches the MySQL password
+    volumes:
+      - zabbix-web-nginx-mysql-data:/var/lib/nginx  # Persists web UI data
+
+  # Zabbix Agent for Monitoring
+  zabbix-agent:
+    image: zabbix/zabbix-agent  # Uses the Zabbix Agent image
+    container_name: zabbix-agent  # Custom container name for Zabbix Agent
+    restart: always  # Ensures the agent always restarts automatically
+    networks:
+      - zabbix-net  # Connects to the same network as the Zabbix server
+    environment:  # Environment configuration for Zabbix Agent
+      - ZBX_HOSTNAME=GCG-ZS01  # Custom hostname for the agent to report as
+      - ZBX_SERVER_HOST=zabbix-server-mysql  # Points to the Zabbix server
+      - SERVER=zabbix-server-mysql  # Defines the Zabbix server host
+
+volumes:  # Defines named volumes for persistent storage
+  mysql-data:  # Volume for MySQL data
+  zabbix-server-mysql-data:  # Volume for Zabbix Server data
+  zabbix-web-nginx-mysql-data:  # Volume for Zabbix Web data
+
+networks:  # Defines custom networks for the services
+  zabbix-net:
+    name: zabbix-net  # Specifies a custom network name
+    driver: bridge  # Uses the bridge driver for network isolation
